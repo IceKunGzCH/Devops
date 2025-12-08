@@ -23,24 +23,60 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $title = trim($_POST["title"]);
     $content = trim($_POST["content"]);
     $tags_raw = trim($_POST["tags"]);
+    $image_url = NULL; // กำหนดค่าเริ่มต้นเป็น NULL สำหรับคอลัมน์รูปภาพ
 
-    // 3. ตรวจสอบความถูกต้องของข้อมูล
+    // 3. ตรวจสอบความถูกต้องของข้อมูลหลัก
     if (empty($title) || empty($content)) {
         $error = "❌ กรุณากรอกหัวข้อและเนื้อหาของกระทู้ให้ครบถ้วน";
-    } else {
-        // 4. จัดการ Tags (แปลงจากสตริงเป็นรูปแบบที่สะอาด)
-        // เช่น: "การเมือง, ท่องเที่ยว, อาหาร" -> "การเมือง,ท่องเที่ยว,อาหาร"
+    } 
+    
+    // === ส่วนใหม่: การจัดการไฟล์อัปโหลด (ถ้าไม่มี error หลัก) ===
+    if (empty($error) && isset($_FILES['topic_image']) && $_FILES['topic_image']['error'] === UPLOAD_ERR_OK) {
+        $target_dir = "uploads/";
+        // ตรวจสอบและสร้างโฟลเดอร์ uploads ถ้ายังไม่มี
+        if (!is_dir($target_dir)) {
+            mkdir($target_dir, 0777, true);
+        }
+
+        $allowed_types = ['image/jpeg', 'image/png', 'image/gif'];
+        $max_size = 5 * 1024 * 1024; // 5MB
+        $file_info = $_FILES['topic_image'];
+        
+        if ($file_info['size'] > $max_size) {
+            $error = "❌ ขนาดไฟล์รูปภาพต้องไม่เกิน 5MB";
+        } elseif (!in_array($file_info['type'], $allowed_types)) {
+            $error = "❌ ชนิดไฟล์รูปภาพไม่ถูกต้อง รองรับเฉพาะ JPG, PNG, GIF";
+        } else {
+            // สร้างชื่อไฟล์ที่ไม่ซ้ำกัน
+            $file_ext = pathinfo($file_info['name'], PATHINFO_EXTENSION);
+            $new_file_name = uniqid('img_', true) . '.' . strtolower($file_ext);
+            $target_file = $target_dir . $new_file_name;
+            
+            // ย้ายไฟล์จาก temp ไปยังโฟลเดอร์ uploads
+            if (move_uploaded_file($file_info['tmp_name'], $target_file)) {
+                $image_url = $new_file_name; // บันทึกชื่อไฟล์ (path สัมพัทธ์) ลง DB
+            } else {
+                $error = "❌ เกิดข้อผิดพลาดในการย้ายไฟล์ โปรดตรวจสอบสิทธิ์โฟลเดอร์ 'uploads'";
+            }
+        }
+    }
+    // === สิ้นสุดการจัดการไฟล์อัปโหลด ===
+
+
+    // 4. บันทึกกระทู้ลงในฐานข้อมูล ถ้าไม่มี Error เลย
+    if (empty($error)) {
+        // จัดการ Tags
         $tags = preg_replace('/\s*,\s*/', ',', $tags_raw); 
 
-        // 5. บันทึกกระทู้ลงในฐานข้อมูล
-        // ใช้ Prepared Statement เพื่อป้องกัน SQL Injection
-        $stmt = $conn->prepare("INSERT INTO Topic (user_id, title, content, tags) VALUES (?, ?, ?, ?)");
-        $stmt->bind_param("isss", $user_id, $title, $content, $tags);
+        // ใช้ Prepared Statement โดยเพิ่มคอลัมน์ image_url
+        $sql = "INSERT INTO Topic (user_id, title, content, tags, image_url) VALUES (?, ?, ?, ?, ?)";
+        $stmt = $conn->prepare($sql);
+        // ผูกตัวแปร: i, s, s, s, s (integer, string, string, string, string สำหรับ image_url)
+        $stmt->bind_param("issss", $user_id, $title, $content, $tags, $image_url);
         
         if ($stmt->execute()) {
             // บันทึกสำเร็จ
             $success = "✅ ตั้งกระทู้สำเร็จ! หัวข้อ: " . htmlspecialchars($title);
-            // ดึง ID กระทู้ที่เพิ่งบันทึกเพื่อลิงก์ไปยังหน้ากระทู้นั้น (สมมติว่าชื่อ topic_view.php)
             $new_topic_id = $conn->insert_id;
             header("Location: topic_view.php?id=" . $new_topic_id);
             exit();
@@ -116,6 +152,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 </head>
 <body>
 
+<!-- Navbar (แบบเรียบง่ายสำหรับหน้า Post) -->
 <nav class="navbar navbar-expand-lg navbar-dark navbar-custom sticky-top">
     <div class="container">
         <a class="navbar-brand" href="index.php">
@@ -150,13 +187,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             </div>
         <?php endif; ?>
 
-        <form method="POST" action="">
+        <!-- **สำคัญ:** เพิ่ม enctype="multipart/form-data" เพื่อรองรับการอัปโหลดไฟล์ -->
+        <form method="POST" action="" enctype="multipart/form-data"> 
             
             <div class="mb-4">
                 <label for="title" class="form-label fw-bold"><i class="fas fa-heading"></i> หัวข้อกระทู้ (Title)</label>
                 <input type="text" class="form-control form-control-lg" id="title" name="title" required 
-                       placeholder="กรอกหัวข้อที่น่าสนใจ" 
-                       value="<?= isset($_POST['title']) ? htmlspecialchars($_POST['title']) : '' ?>">
+                        placeholder="กรอกหัวข้อที่น่าสนใจ" 
+                        value="<?= isset($_POST['title']) ? htmlspecialchars($_POST['title']) : '' ?>">
             </div>
 
             <div class="mb-4">
@@ -169,8 +207,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <div class="mb-4">
                 <label for="tags" class="form-label fw-bold"><i class="fas fa-tags"></i> แท็ก (Tags)</label>
                 <input type="text" class="form-control" id="tags" name="tags" 
-                       placeholder="คั่นด้วยคอมมา เช่น การเมือง, ห้องบลูแพลเน็ต, หุ้น"
-                       value="<?= isset($_POST['tags']) ? htmlspecialchars($_POST['tags']) : '' ?>">
+                        placeholder="คั่นด้วยคอมมา เช่น การเมือง, ห้องบลูแพลเน็ต, หุ้น"
+                        value="<?= isset($_POST['tags']) ? htmlspecialchars($_POST['tags']) : '' ?>">
+            </div>
+            
+            <!-- ส่วนเพิ่มสำหรับอัปโหลดรูปภาพ -->
+            <div class="mb-4">
+                <label for="topicImage" class="form-label fw-bold"><i class="fas fa-image"></i> รูปภาพประกอบ (ไม่บังคับ)</label>
+                <input class="form-control" type="file" id="topicImage" name="topic_image" accept="image/*">
+                <div class="form-text text-muted">รองรับไฟล์ JPG, PNG, GIF ขนาดไม่เกิน 5MB.</div>
             </div>
             
             <div class="d-grid gap-2 d-md-flex justify-content-md-end">

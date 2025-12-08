@@ -20,6 +20,7 @@ $stmt = $conn->prepare("
         t.created_at, 
         t.views,
         t.user_id, 
+        t.image_url, /* <--- เพิ่มการดึง image_url */
         u.username
     FROM Topic t
     JOIN User u ON t.user_id = u.user_id
@@ -44,6 +45,7 @@ $conn->query("UPDATE Topic SET views = views + 1 WHERE topic_id = $topic_id");
 // กำหนดตัวแปรสำหรับแสดงผล
 $title = htmlspecialchars($topic['title']);
 $content = nl2br(htmlspecialchars($topic['content']));
+$image_url = htmlspecialchars($topic['image_url']); // <--- เตรียมตัวแปรสำหรับรูปภาพ
 $username = htmlspecialchars($topic['username']);
 $created_at = date('d/m/Y H:i:s', strtotime($topic['created_at']));
 $tags = htmlspecialchars($topic['tags']);
@@ -120,6 +122,13 @@ $conn->close();
             margin-right: 5px;
             font-size: 0.9em;
         }
+        /* CSS สำหรับรูปภาพประกอบ */
+        .topic-image img {
+            max-height: 400px; /* จำกัดความสูง */
+            width: auto;      /* ปรับความกว้างอัตโนมัติ */
+            object-fit: contain;
+            border: 1px solid #ddd;
+        }
     </style>
 </head>
 <body>
@@ -171,6 +180,17 @@ $conn->close();
                         </div>
                     <?php endif; ?>
                 </div>
+
+                <!-- === ส่วนใหม่: แสดงรูปภาพประกอบกระทู้ === -->
+                <?php if (!empty($image_url)): ?>
+                    <div class="mb-4 text-center topic-image">
+                        <img src="uploads/<?= $image_url ?>" 
+                             class="img-fluid rounded shadow" 
+                             alt="<?= $title ?>" 
+                             title="รูปภาพประกอบกระทู้">
+                    </div>
+                <?php endif; ?>
+                <!-- ================================== -->
 
                 <div class="topic-content mb-5">
                     <?= $content ?>
