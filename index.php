@@ -9,8 +9,28 @@ include 'connect_db.php';
 $is_logged_in = isset($_SESSION['user_id']);
 $username = $is_logged_in ? htmlspecialchars($_SESSION['username']) : 'ผู้เยี่ยมชม';
 
+// ==========================================================
+// [ส่วนใหม่] Logic การรับค่า Tag Filter และกำหนด Header
+// ==========================================================
+$tag_filter = '';
+$page_title = 'กระทู้ล่าสุด'; // หัวข้อเริ่มต้น
+
+if (isset($_GET['tag']) && !empty($_GET['tag'])) {
+    // 1. ทำความสะอาดและป้องกัน SQL Injection
+    $target_tag = $conn->real_escape_string(trim($_GET['tag']));
+    
+    // 2. สร้างเงื่อนไข WHERE สำหรับ SQL Query
+    // ค้นหากระทู้ที่มีชื่อแท็กนั้นอยู่
+    $tag_filter = "WHERE t.tags LIKE '%" . $target_tag . "%'";
+    
+    // 3. กำหนดชื่อหัวข้อใหม่
+    $page_title = "กระทู้ที่มีแท็ก: #" . htmlspecialchars($target_tag);
+}
+// ==========================================================
+
+
 // -----------------------------
-// 2) Query กระทู้ล่าสุด
+// 2) Query กระทู้ล่าสุด (พร้อมเงื่อนไข Tag Filter)
 // -----------------------------
 $topics = [];
 $sql = "
@@ -27,6 +47,7 @@ SELECT
 FROM Topic t
 JOIN User u ON t.user_id = u.user_id
 LEFT JOIN Comment c ON t.topic_id = c.topic_id
+{$tag_filter}  /* <--- นำเงื่อนไข Tag Filter มาใช้ตรงนี้ */
 GROUP BY 
     t.topic_id, t.title, t.content, t.tags, 
     t.created_at, t.views, t.image_url, u.username
@@ -43,7 +64,7 @@ if ($result && $result->num_rows > 0) {
 }
 
 // -----------------------------
-// 3) ดึงแท็กยอดนิยมวันนี้
+// 3) ดึงแท็กยอดนิยมวันนี้ (ไม่ต้องเปลี่ยนแปลง)
 // -----------------------------
 $today = date('Y-m-d');
 
@@ -174,8 +195,8 @@ $conn->close();
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav me-auto">
                 <li class="nav-item"><a class="nav-link text-white" href="#">ห้องรวม</a></li>
-                <li class="nav-item"><a class="nav-link text-white" href="#">แนะนำ</a></li>
-                <li class="nav-item"><a class="nav-link text-white" href="#">กระทู้เด่น</a></li>
+                <li class="nav-item"><a class="nav-link text-white" href="featured.php">แนะนำ</a></li>
+                <li class="nav-item"><a class="nav-link text-white" href="notable.php">กระทู้เด่น</a></li>
 				<li class="nav-item"><a class="nav-link text-white active" href="contact.php">ติดต่อเรา</a></li>
             </ul>
 
@@ -205,7 +226,7 @@ $conn->close();
 
         <!-- Left (Topics List) -->
         <div class="col-lg-8">
-            <h4 class="mb-4 text-secondary"><i class="fas fa-list-alt"></i> กระทู้ล่าสุด</h4>
+            <h4 class="mb-4 text-secondary"><i class="fas fa-list-alt"></i> <?= $page_title ?></h4>
 
             <?php if (!empty($topics)): ?>
                 <?php foreach ($topics as $topic): ?>

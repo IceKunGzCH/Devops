@@ -77,8 +77,8 @@ $username = $is_logged_in ? htmlspecialchars($_SESSION['username']) : 'ผู้
 		<div class="collapse navbar-collapse" id="navbarNav">
 			<ul class="navbar-nav me-auto">
 				<li class="nav-item"><a class="nav-link text-white" href="index.php">ห้องรวม</a></li>
-				<li class="nav-item"><a class="nav-link text-white" href="#">แนะนำ</a></li>
-				<li class="nav-item"><a class="nav-link text-white" href="#">กระทู้เด่น</a></li>
+				<li class="nav-item"><a class="nav-link text-white" href="featured.php">แนะนำ</a></li>
+				<li class="nav-item"><a class="nav-link text-white" href="notable.php">กระทู้เด่น</a></li>
 				<li class="nav-item"><a class="nav-link text-white active" href="contact.php">ติดต่อเรา</a></li>
 			</ul>
 
@@ -130,32 +130,32 @@ $username = $is_logged_in ? htmlspecialchars($_SESSION['username']) : 'ผู้
 			<div class="card p-4 card-map">
 				<h5 class="text-orange"><i class="fas fa-paper-plane"></i> ส่งข้อความถึงเรา</h5>
 
-				<form class="mt-3" action="save_report.php" method="POST">
+				<form class="mt-3">
 					<div class="mb-3">
 						<label class="form-label">ชื่อของคุณ</label>
-						<input type="text" name="name_report" class="form-control" required placeholder="เช่น สมชาย ใจดี">
+						<input type="text" class="form-control" required placeholder="เช่น สมชาย ใจดี">
 					</div>
-
 					<div class="mb-3">
 						<label class="form-label">อีเมลติดต่อกลับ</label>
-						<input type="email" name="email_report" class="form-control" required placeholder="example@email.com">
+						<input type="email" class="form-control" required placeholder="example@email.com">
 					</div>
-
 					<div class="mb-3">
 						<label class="form-label">หัวข้อ</label>
-						<input type="text" name="report_hand" class="form-control" required placeholder="สอบถามเรื่อง...">
+						<input type="text" class="form-control" required placeholder="สอบถามเรื่อง...">
 					</div>
-
 					<div class="mb-3">
 						<label class="form-label">ข้อความ</label>
-						<textarea name="report" class="form-control" rows="4" required placeholder="รายละเอียดที่ต้องการติดต่อ..."></textarea>
+						<textarea class="form-control" rows="4" required placeholder="รายละเอียดที่ต้องการติดต่อ..."></textarea>
 					</div>
 
 					<button type="submit" class="btn w-100" style="background:#ff6600;color:#fff;">
 						<i class="fas fa-paper-plane"></i> ส่งข้อความ
 					</button>
-				</form>
 
+					<div class="alert alert-warning mt-3">
+						<b>หมายเหตุ:</b> ฟอร์มนี้เป็นตัวอย่าง ระบบยังไม่ได้ส่งข้อมูลจริง
+					</div>
+				</form>
 			</div>
 		</div>
 

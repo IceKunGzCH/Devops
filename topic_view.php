@@ -14,13 +14,14 @@ if ($topic_id == 0) {
 // 2. ดึงข้อมูลกระทู้และผู้เขียน
 $stmt = $conn->prepare("
     SELECT 
+        t.topic_id, /* เพิ่ม topic_id สำหรับใช้ใน logic แนะนำ */
         t.title, 
         t.content, 
         t.tags, 
         t.created_at, 
         t.views,
         t.user_id, 
-        t.image_url, /* <--- เพิ่มการดึง image_url */
+        t.image_url, 
         u.username
     FROM Topic t
     JOIN User u ON t.user_id = u.user_id
@@ -40,12 +41,13 @@ $stmt->close();
 $topic_user_id = $topic['user_id']; 
 
 // 3. (Optional) อัพเดทจำนวน Views
+// ต้องเชื่อมต่อ DB ใหม่ถ้ามีการปิดไปแล้ว แต่ในโค้ดนี้ยังไม่ได้ปิด conn จึงใช้ได้เลย
 $conn->query("UPDATE Topic SET views = views + 1 WHERE topic_id = $topic_id");
 
 // กำหนดตัวแปรสำหรับแสดงผล
 $title = htmlspecialchars($topic['title']);
 $content = nl2br(htmlspecialchars($topic['content']));
-$image_url = htmlspecialchars($topic['image_url']); // <--- เตรียมตัวแปรสำหรับรูปภาพ
+$image_url = htmlspecialchars($topic['image_url']); 
 $username = htmlspecialchars($topic['username']);
 $created_at = date('d/m/Y H:i:s', strtotime($topic['created_at']));
 $tags = htmlspecialchars($topic['tags']);
@@ -55,7 +57,53 @@ $views = number_format($topic['views'] + 1);
 $can_edit = isset($_SESSION['user_id']) && $_SESSION['user_id'] == $topic_user_id;
 
 
-// 4. ดึงความคิดเห็นทั้งหมดสำหรับกระทู้นี้
+// =================================================================
+// 5. [ส่วนใหม่] Logic การแนะนำ Content-Based (กระทู้ที่เกี่ยวข้อง)
+// =================================================================
+$related_topics = [];
+// ตรวจสอบว่ากระทู้หลักมี Tags หรือไม่
+if (!empty($topic['tags'])) {
+    
+    // 5.1 เตรียม Tags สำหรับ Query
+    $current_tags_array = array_filter(array_map('trim', explode(',', $topic['tags'])));
+    
+    $tag_conditions = [];
+    foreach ($current_tags_array as $tag) {
+        // ใช้ LIKE เพื่อค้นหา Tags ในฐานข้อมูลอย่างปลอดภัย
+        $escaped_tag = $conn->real_escape_string($tag);
+        // เงื่อนไข: t.tags มี tag นี้อยู่ข้างใน
+        $tag_conditions[] = "t.tags LIKE '%" . $escaped_tag . "%'";
+    }
+    
+    $where_clause = implode(' OR ', $tag_conditions);
+
+    // 5.2 Query เพื่อค้นหากระทู้ที่เกี่ยวข้อง
+    $sql_related = "
+    SELECT 
+        t.topic_id,
+        t.title,
+        t.views
+    FROM Topic t
+    WHERE 
+        t.topic_id != {$topic_id}   -- ไม่รวมกระทู้ปัจจุบัน
+        AND ({$where_clause})       -- ต้องมี Tags ร่วมกันอย่างน้อย 1 Tag
+    ORDER BY 
+        t.views DESC,               -- เรียงตาม Views
+        t.created_at DESC
+    LIMIT 5;
+    ";
+    
+    $result_related = $conn->query($sql_related);
+
+    if ($result_related && $result_related->num_rows > 0) {
+        while ($row = $result_related->fetch_assoc()) {
+            $related_topics[] = $row;
+        }
+    }
+}
+// =================================================================
+
+// 6. ดึงความคิดเห็นทั้งหมดสำหรับกระทู้นี้
 $comment_stmt = $conn->prepare("
     SELECT 
         c.content, 
@@ -71,7 +119,9 @@ $comment_stmt->execute();
 $comments_result = $comment_stmt->get_result();
 $comment_count = $comments_result->num_rows; 
 $comment_stmt->close();
-$conn->close();
+
+// ปิดการเชื่อมต่อ DB เมื่อจบงานทั้งหมด
+$conn->close(); 
 
 ?>
 <!DOCTYPE html>
@@ -125,9 +175,17 @@ $conn->close();
         /* CSS สำหรับรูปภาพประกอบ */
         .topic-image img {
             max-height: 400px; /* จำกัดความสูง */
-            width: auto;      /* ปรับความกว้างอัตโนมัติ */
+            width: auto;      /* ปรับความกว้างอัตโนมัติ */
             object-fit: contain;
             border: 1px solid #ddd;
+        }
+        .related-section {
+            background-color: #f0f8ff; /* สีฟ้าอ่อน */
+            border: 1px solid #d0e8ff;
+            border-radius: 8px;
+        }
+        .related-section li {
+            padding-top: 5px;
         }
     </style>
 </head>
@@ -152,6 +210,7 @@ $conn->close();
         <?php endif; ?>
     </div>
 </nav>
+
 <div class="container">
     <div class="row justify-content-center">
         <div class="col-lg-10">
@@ -181,16 +240,22 @@ $conn->close();
                     <?php endif; ?>
                 </div>
 
-                <!-- === ส่วนใหม่: แสดงรูปภาพประกอบกระทู้ === -->
                 <?php if (!empty($image_url)): ?>
-                    <div class="mb-4 text-center topic-image">
-                        <img src="uploads/<?= $image_url ?>" 
-                             class="img-fluid rounded shadow" 
-                             alt="<?= $title ?>" 
-                             title="รูปภาพประกอบกระทู้">
-                    </div>
+                    // โค้ดที่ถูกแก้ไข (ทำให้เป็นลิงก์)
+                    <div class="mb-4">
+                        <label class="fw-bold"><i class="fas fa-tags"></i> แท็ก:</label>
+                    <?php 
+                        $tag_list = explode(',', $tags);
+                        foreach ($tag_list as $tag_item) {
+                            $tag_item = trim($tag_item);
+                            if (!empty($tag_item)) {
+                            // *** เปลี่ยน <span> เป็น <a> และกำหนด href ไปที่ index.php?tag=... ***
+                            echo '<a href="index.php?tag=' . urlencode($tag_item) . '" class="tag-badge text-decoration-none">' . htmlspecialchars($tag_item) . '</a>';
+            }
+        }
+    ?>
+</div>
                 <?php endif; ?>
-                <!-- ================================== -->
 
                 <div class="topic-content mb-5">
                     <?= $content ?>
@@ -203,12 +268,27 @@ $conn->close();
                         foreach ($tag_list as $tag_item) {
                             $tag_item = trim($tag_item);
                             if (!empty($tag_item)) {
-                                echo '<span class="tag-badge">' . htmlspecialchars($tag_item) . '</span>';
+                                echo '<a href="index.php?tag=' . urlencode($tag_item) . '" class="tag-badge text-decoration-none">' . htmlspecialchars($tag_item) . '</a>';
                             }
                         }
                     ?>
                 </div>
-
+                
+                <?php if (!empty($related_topics)): ?>
+                    <div class="related-section mt-5 pt-3 p-3">
+                        <h5 class="text-primary mb-3"><i class="fas fa-link"></i> กระทู้ที่เกี่ยวข้อง</h5>
+                        <ul class="list-unstyled">
+                            <?php foreach ($related_topics as $rt): ?>
+                                <li class="mb-2 pb-2">
+                                    <a href="topic_view.php?id=<?= $rt['topic_id'] ?>" class="link-dark fw-bold text-decoration-none">
+                                        <?= htmlspecialchars($rt['title']) ?>
+                                    </a>
+                                    <span class="text-muted small d-block">👁️ เข้าชม <?= number_format($rt['views']) ?> ครั้ง</span>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    </div>
+                <?php endif; ?>
                 <div class="mt-5 pt-3 border-top" id="comments">
                     <h4><i class="fas fa-reply"></i> ความคิดเห็น (<?= number_format($comment_count) ?>)</h4>
                     
