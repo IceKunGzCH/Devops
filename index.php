@@ -34,10 +34,6 @@ ORDER BY t.created_at DESC
 LIMIT 15
 ";
 
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
-}
-
 $result = $conn->query($sql);
 
 if ($result && $result->num_rows > 0) {
@@ -45,6 +41,36 @@ if ($result && $result->num_rows > 0) {
         $topics[] = $row;
     }
 }
+
+// -----------------------------
+// 3) ดึงแท็กยอดนิยมวันนี้
+// -----------------------------
+$today = date('Y-m-d');
+
+$sql_tag = "SELECT tags FROM Topic WHERE DATE(created_at) = ?";
+$stmt_tag = $conn->prepare($sql_tag);
+$stmt_tag->bind_param("s", $today);
+$stmt_tag->execute();
+$result_tag = $stmt_tag->get_result();
+
+$tag_count = [];
+
+while ($row = $result_tag->fetch_assoc()) {
+    if (!empty($row['tags'])) {
+        $tags = explode(',', $row['tags']);
+        foreach ($tags as $tag) {
+            $tag = trim($tag);
+            if ($tag !== "") {
+                if (!isset($tag_count[$tag])) {
+                    $tag_count[$tag] = 0;
+                }
+                $tag_count[$tag]++;
+            }
+        }
+    }
+}
+
+arsort($tag_count); // เรียงมาก → น้อย
 
 $conn->close();
 ?>
@@ -149,7 +175,7 @@ $conn->close();
             <ul class="navbar-nav me-auto">
                 <li class="nav-item"><a class="nav-link text-white" href="#">ห้องรวม</a></li>
                 <li class="nav-item"><a class="nav-link text-white" href="#">แนะนำ</a></li>
-                <li class="nav-item"><a class="nav-link text-white" href="notable.php">กระทู้เด่น</a></li>
+                <li class="nav-item"><a class="nav-link text-white" href="#">กระทู้เด่น</a></li>
 				<li class="nav-item"><a class="nav-link text-white active" href="contact.php">ติดต่อเรา</a></li>
             </ul>
 
@@ -219,7 +245,7 @@ $conn->close();
                                 <?php
                                     $tags = array_filter(array_map('trim', explode(',', $topic['tags'])));
                                     foreach ($tags as $tag) {
-                                        echo "<span class='tag-badge'>#$tag</span>";
+                                        echo "<a href='search.php?tag=" . urlencode($tag) . "' class='tag-badge'>#$tag</a> ";
                                     }
                                 ?>
                             </p>
@@ -253,14 +279,27 @@ $conn->close();
         <div class="col-lg-4">
 
             <div class="sidebar mb-4">
-                <h5 class="text-primary mb-3"><i class="fas fa-fire"></i> แท็กยอดนิยมวันนี้</h5>
+            <h5 class="text-primary mb-3"><i class="fas fa-fire"></i> แท็กยอดนิยมวันนี้</h5>
+
+            <?php if (empty($tag_count)): ?>
+                <p class="text-muted small">ยังไม่มีการใช้แท็กในวันนี้</p>
+
+            <?php else: ?>
                 <ul class="list-unstyled">
-                    <li><a href="#" class="link-secondary">#เที่ยวทะเล (25K)</a></li>
-                    <li><a href="#" class="link-secondary">#มังงะน่าอ่าน (18K)</a></li>
-                    <li><a href="#" class="link-secondary">#หุ้นกู้ (15K)</a></li>
-                    <li><a href="#" class="link-secondary">#ห้องสินธร (12K)</a></li>
+                    <?php 
+                    $i = 0;
+                    foreach ($tag_count as $tag => $count): 
+                        if ($i++ >= 10) break; // จำกัด 10 อันดับ
+                    ?>
+                    <li>
+                        <a href="search.php?tag=<?= urlencode($tag) ?>" class="link-secondary">
+                            #<?= htmlspecialchars($tag) ?> (<?= $count ?>)
+                        </a>
+                    </li>
+                    <?php endforeach; ?>
                 </ul>
-            </div>
+            <?php endif; ?>
+        </div>
 
             <div class="sidebar">
                 <h5 class="text-success mb-3"><i class="fas fa-users"></i> แนะนำสมาชิก</h5>
