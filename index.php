@@ -149,7 +149,7 @@ $conn->close();
             <ul class="navbar-nav me-auto">
                 <li class="nav-item"><a class="nav-link text-white" href="#">ห้องรวม</a></li>
                 <li class="nav-item"><a class="nav-link text-white" href="#">แนะนำ</a></li>
-                <li class="nav-item"><a class="nav-link text-white" href="#">กระทู้เด่น</a></li>
+                <li class="nav-item"><a class="nav-link text-white" href="notable.php">กระทู้เด่น</a></li>
 				<li class="nav-item"><a class="nav-link text-white active" href="contact.php">ติดต่อเรา</a></li>
             </ul>
 
